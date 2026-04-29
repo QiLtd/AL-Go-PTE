@@ -21,7 +21,7 @@ defaults:
 
 jobs:
   PushChanges:
-    runs-on: [windows-latest]
+    runs-on: [ self-hosted ]
     name: Push changes to ${{ inputs.environment }}
     steps:
       - name: Checkout
