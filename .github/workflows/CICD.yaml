@@ -305,8 +305,46 @@ jobs:
         id: deployment
         uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0
 
+  # Clippy nonsense which I'm sure will definitely be functional
+  WaitForDeployWindow:
+    needs: [Initialization, Build, BuildPP]
+    if: >-
+      (!cancelled()) &&
+      (needs.Build.result == 'success' || needs.Build.result == 'skipped') &&
+      (needs.BuildPP.result == 'success' || needs.BuildPP.result == 'skipped') &&
+      needs.Initialization.outputs.environmentCount > 0
+    runs-on: [self-hosted]
+    timeout-minutes: 1440
+    steps:
+      - name: Wait for 6PM-6AM UTC deployment window
+        shell: bash
+        run: |
+          WINDOW_OPEN=18   # 6PM UTC
+          WINDOW_CLOSE=6   # 6AM UTC
+  
+          CURRENT_HOUR=$(date -u +%-H)
+          CURRENT_EPOCH=$(date -u +%s)
+  
+          echo "Current UTC time: $(date -u '+%Y-%m-%d %H:%M:%S')"
+          echo "Deploy window: ${WINDOW_OPEN}:00 – ${WINDOW_CLOSE}:00 UTC"
+  
+          # Check if we're already inside the window (18:00–23:59 or 00:00–05:59)
+          if [ "$CURRENT_HOUR" -ge "$WINDOW_OPEN" ] || [ "$CURRENT_HOUR" -lt "$WINDOW_CLOSE" ]; then
+            echo "✅ Already within the deployment window — proceeding immediately."
+            exit 0
+          fi
+  
+          # Outside the window (06:00–17:59) — calculate wait until 18:00 today
+          TARGET_EPOCH=$(date -u -d "today ${WINDOW_OPEN}:00:00" +%s)
+          WAIT_SECONDS=$((TARGET_EPOCH - CURRENT_EPOCH))
+          WAIT_MINUTES=$((WAIT_SECONDS / 60))
+  
+          echo "⏳ Outside deployment window. Waiting ${WAIT_MINUTES} minutes (~$(( WAIT_MINUTES / 60 ))h $(( WAIT_MINUTES % 60 ))m) until ${WINDOW_OPEN}:00 UTC..."
+          sleep "$WAIT_SECONDS"
+
+
   Deploy:
-    needs: [ Initialization, Build, BuildPP ]
+    needs: [ Initialization, Build, BuildPP, WaitForDeployWindow ]
     if: (!cancelled()) && (needs.Build.result == 'success' || needs.Build.result == 'skipped') && (needs.BuildPP.result == 'success' || needs.BuildPP.result == 'skipped') && needs.Initialization.outputs.environmentCount > 0
     strategy: ${{ fromJson(needs.Initialization.outputs.environmentsMatrixJson) }}
     runs-on: ${{ fromJson(matrix.os) }}
