@@ -78,35 +78,35 @@ jobs:
       telemetryScopeJson: ${{ steps.init.outputs.telemetryScopeJson }}
     steps:
       - name: Dump Workflow Information
-        uses: microsoft/AL-Go-Actions/DumpWorkflowInfo@v9.2
+        uses: microsoft/AL-Go-Actions/DumpWorkflowInfo@v9.0
         with:
           shell: powershell
 
       - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Initialize the workflow
         id: init
-        uses: microsoft/AL-Go-Actions/WorkflowInitialize@v9.2
+        uses: microsoft/AL-Go-Actions/WorkflowInitialize@v9.0
         with:
           shell: powershell
 
       - name: Read settings
         id: ReadSettings
-        uses: microsoft/AL-Go-Actions/ReadSettings@v9.2
+        uses: microsoft/AL-Go-Actions/ReadSettings@v9.0
         with:
           shell: powershell
           get: templateUrl,repoName,type,powerPlatformSolutionFolder
 
       - name: Validate Workflow Input
         if: ${{ github.event_name == 'workflow_dispatch' }}
-        uses: microsoft/AL-Go-Actions/ValidateWorkflowInput@v9.2
+        uses: microsoft/AL-Go-Actions/ValidateWorkflowInput@v9.0
         with:
           shell: powershell
 
       - name: Read secrets
         id: ReadSecrets
-        uses: microsoft/AL-Go-Actions/ReadSecrets@v9.2
+        uses: microsoft/AL-Go-Actions/ReadSecrets@v9.0
         with:
           shell: powershell
           gitHubSecrets: ${{ toJson(secrets) }}
@@ -115,22 +115,22 @@ jobs:
 
       - name: Determine Projects
         id: determineProjects
-        uses: microsoft/AL-Go-Actions/DetermineProjectsToBuild@v9.2
+        uses: microsoft/AL-Go-Actions/DetermineProjectsToBuild@v9.0
         with:
           shell: powershell
 
       - name: Check for updates to AL-Go system files
-        uses: microsoft/AL-Go-Actions/CheckForUpdates@v9.2
+        uses: microsoft/AL-Go-Actions/CheckForUpdates@v9.0
         env:
           GITHUB_TOKEN: ${{ github.token }}
         with:
           shell: powershell
           templateUrl: ${{ env.templateUrl }}
-          token: ${{ fromJson(steps.ReadSecrets.outputs.Secrets).ghTokenWorkflow }}
+          token: ${{ fromJson(steps.ReadSecrets.outputs.ghTokenWorkflow }}
           downloadLatest: true
 
       - name: Determine artifacts for release
-        uses: microsoft/AL-Go-Actions/DetermineArtifactsForRelease@v9.2
+        uses: microsoft/AL-Go-Actions/DetermineArtifactsForRelease@v9.0
         id: determineArtifactsForRelease
         with:
           shell: powershell
@@ -141,7 +141,7 @@ jobs:
 
       - name: Prepare release notes
         id: createreleasenotes
-        uses: microsoft/AL-Go-Actions/CreateReleaseNotes@v9.2
+        uses: microsoft/AL-Go-Actions/CreateReleaseNotes@v9.0
         with:
           shell: powershell
           buildVersion: ${{ github.event.inputs.buildVersion }}
@@ -149,7 +149,7 @@ jobs:
           target_commitish: ${{ steps.determineArtifactsForRelease.outputs.commitish }}
 
       - name: Create release
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         id: createrelease
         env:
           bodyMD: ${{ steps.createreleasenotes.outputs.releaseNotes }}
@@ -187,16 +187,16 @@ jobs:
       fail-fast: true
     steps:
       - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Read settings
-        uses: microsoft/AL-Go-Actions/ReadSettings@v9.2
+        uses: microsoft/AL-Go-Actions/ReadSettings@v9.0
         with:
           shell: powershell
 
       - name: Read secrets
         id: ReadSecrets
-        uses: microsoft/AL-Go-Actions/ReadSecrets@v9.2
+        uses: microsoft/AL-Go-Actions/ReadSecrets@v9.0
         with:
           shell: powershell
           gitHubSecrets: ${{ toJson(secrets) }}
@@ -219,7 +219,7 @@ jobs:
           Invoke-WebRequest -UseBasicParsing -Headers $headers -Uri $ENV:MATRIX_URL -OutFile "$($ENV:MATRIX_NAME).zip"
 
       - name: Upload release artifacts
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
           releaseId: ${{ needs.createrelease.outputs.releaseId }}
           MATRIX_NAME: ${{ matrix.name }}
@@ -239,9 +239,60 @@ jobs:
               data: fs.readFileSync(assetPath)
             });
 
+      - name: Extract and upload .app file
+        env:
+          releaseId: ${{ needs.createrelease.outputs.releaseId }}
+          MATRIX_NAME: ${{ matrix.name }}
+          GITHUB_TOKEN: ${{ steps.ReadSecrets.outputs.TokenForPush }}
+        run: |
+          $errorActionPreference = "Stop"; $ProgressPreference = "SilentlyContinue"; Set-StrictMode -Version 2.0
+          $zipFile = "$($ENV:MATRIX_NAME).zip"
+          $extractPath = ".\release-extract"
+          
+          # Extract the zip file
+          Write-Host "Extracting $zipFile to $extractPath"
+          if (Test-Path $extractPath) { Remove-Item -Recurse -Force $extractPath }
+          Expand-Archive -Path $zipFile -DestinationPath $extractPath -Force
+          
+          # Find all .app files recursively
+          $appFiles = @(Get-ChildItem -Path $extractPath -Filter "*.app" -Recurse)
+          
+          if ($appFiles.Count -gt 0) {
+            Write-Host "Found $($appFiles.Count) .app file(s)"
+            
+            foreach ($appFile in $appFiles) {
+              $appFileName = $appFile.Name
+              Write-Host "Uploading .app file: $appFileName"
+              
+              # Use gh CLI to upload release asset
+              $releaseId = $ENV:releaseId
+              $repoUrl = "https://api.github.com/repos/${{ github.repository }}/releases/$releaseId/assets"
+              
+              $headers = @{
+                "Authorization" = "token $($ENV:GITHUB_TOKEN)"
+                "X-GitHub-Api-Version" = "2022-11-28"
+                "Content-Type" = "application/octet-stream"
+              }
+              
+              $fileContent = [System.IO.File]::ReadAllBytes($appFile.FullName)
+              $uploadResponse = Invoke-WebRequest -UseBasicParsing `
+                -Headers $headers `
+                -Uri "$repoUrl`?name=$([System.Uri]::EscapeDataString($appFileName))" `
+                -Method POST `
+                -Body $fileContent
+              
+              Write-Host "✓ Uploaded: $appFileName (ID: $($uploadResponse.Content | ConvertFrom-Json | Select-Object -ExpandProperty id))"
+            }
+          } else {
+            Write-Host "⚠ No .app files found in artifact"
+          }
+          
+          # Clean up
+          Remove-Item -Recurse -Force $extractPath
+
       - name: Deliver to NuGet
-        uses: microsoft/AL-Go-Actions/Deliver@v9.2
-        if: ${{ matrix.atype == 'Apps' && fromJson(steps.ReadSecrets.outputs.Secrets).nuGetContext != '' }}
+        uses: microsoft/AL-Go-Actions/Deliver@v9.0
+        if: ${{ fromJson(steps.ReadSecrets.outputs.Secrets).nuGetContext != '' }}
         env:
           Secrets: '${{ steps.ReadSecrets.outputs.Secrets }}'
         with:
@@ -253,8 +304,8 @@ jobs:
           atypes: 'Apps,TestApps'
 
       - name: Deliver to Storage
-        uses: microsoft/AL-Go-Actions/Deliver@v9.2
-        if: ${{ matrix.atype == 'Apps' && fromJson(steps.ReadSecrets.outputs.Secrets).storageContext != '' }}
+        uses: microsoft/AL-Go-Actions/Deliver@v9.0
+        if: ${{ fromJson(steps.ReadSecrets.outputs.Secrets).storageContext != '' }}
         env:
           Secrets: '${{ steps.ReadSecrets.outputs.Secrets }}'
         with:
@@ -271,7 +322,7 @@ jobs:
     runs-on: [ self-hosted ]
     steps:
       - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: '${{ needs.createRelease.outputs.commitish }}'
 
@@ -294,16 +345,16 @@ jobs:
     runs-on: [ self-hosted ]
     steps:
       - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Read settings
-        uses: microsoft/AL-Go-Actions/ReadSettings@v9.2
+        uses: microsoft/AL-Go-Actions/ReadSettings@v9.0
         with:
           shell: powershell
 
       - name: Read secrets
         id: ReadSecrets
-        uses: microsoft/AL-Go-Actions/ReadSecrets@v9.2
+        uses: microsoft/AL-Go-Actions/ReadSecrets@v9.0
         with:
           shell: powershell
           gitHubSecrets: ${{ toJson(secrets) }}
@@ -311,7 +362,7 @@ jobs:
           useGhTokenWorkflowForPush: '${{ github.event.inputs.useGhTokenWorkflow }}'
 
       - name: Update Version Number
-        uses: microsoft/AL-Go-Actions/IncrementVersionNumber@v9.2
+        uses: microsoft/AL-Go-Actions/IncrementVersionNumber@v9.0
         with:
           shell: powershell
           token: ${{ steps.ReadSecrets.outputs.TokenForPush }}
@@ -325,11 +376,11 @@ jobs:
     runs-on: [ self-hosted ]
     steps:
       - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Finalize the workflow
         id: PostProcess
-        uses: microsoft/AL-Go-Actions/WorkflowPostProcess@v9.2
+        uses: microsoft/AL-Go-Actions/WorkflowPostProcess@v9.0
         env:
           GITHUB_TOKEN: ${{ github.token }}
         with:
