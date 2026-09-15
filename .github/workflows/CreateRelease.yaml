@@ -16,7 +16,7 @@ on:
         required: true
         default: ''
       tag:
-        description: Tag of this release (needs to be semantic version string https://semver.org, ex. 1.0.0)
+        description: Tag of this release (semantic version like 1.0.0, or incremental +1, +0.1, +0.0.1)
         required: true
         default: ''
       releaseType:
@@ -99,10 +99,51 @@ jobs:
           get: templateUrl,repoName,type,powerPlatformSolutionFolder
 
       - name: Validate Workflow Input
-        if: ${{ github.event_name == 'workflow_dispatch' }}
+        if: ${{ github.event_name == 'workflow_dispatch' && !startsWith(github.event.inputs.tag, '+') }}
         uses: microsoft/AL-Go-Actions/ValidateWorkflowInput@v9.0
         with:
           shell: powershell
+
+      - name: Resolve tag input
+        id: resolveTag
+        env:
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+        run: |
+          $errorActionPreference = "Stop"; $ProgressPreference = "SilentlyContinue"; Set-StrictMode -Version 2.0
+          $tagInput = "$env:INPUT_TAG".Trim()
+          if ([string]::IsNullOrWhiteSpace($tagInput)) {
+            throw "Tag input cannot be empty."
+          }
+          if (-not $tagInput.StartsWith('+')) {
+            Add-Content -Path $env:GITHUB_OUTPUT -Value "tag=$tagInput"
+            exit 0
+          }
+          if ($tagInput -notin @('+1', '+0.1', '+0.0.1')) {
+            throw "Unsupported incremental tag value '$tagInput'. Supported values: +1, +0.1, +0.0.1"
+          }
+          $settingsPath = '.AL-Go/settings.json'
+          if (-not (Test-Path $settingsPath)) {
+            throw "Cannot resolve incremental tag: $settingsPath not found."
+          }
+          $settings = Get-Content -Raw -Path $settingsPath | ConvertFrom-Json
+          $baseVersion = '1.0.0'
+          if ($settings.PSObject.Properties.Name -contains 'repoVersion' -and -not [string]::IsNullOrWhiteSpace([string]$settings.repoVersion)) {
+            $baseVersion = [string]$settings.repoVersion
+          }
+          $parts = $baseVersion.Split('.')
+          if ($parts.Count -lt 2 -or $parts.Count -gt 3) {
+            throw "repoVersion '$baseVersion' must be major.minor or major.minor.build to use incremental tag input."
+          }
+          $major = [int]$parts[0]
+          $minor = [int]$parts[1]
+          $build = if ($parts.Count -eq 3) { [int]$parts[2] } else { 0 }
+          switch ($tagInput) {
+            '+1'     { $major++; $minor = 0; $build = 0 }
+            '+0.1'   { $minor++; $build = 0 }
+            '+0.0.1' { $build++ }
+          }
+          $resolvedTag = "$major.$minor.$build"
+          Add-Content -Path $env:GITHUB_OUTPUT -Value "tag=$resolvedTag"
 
       - name: Read secrets
         id: ReadSecrets
@@ -145,7 +186,7 @@ jobs:
         with:
           shell: powershell
           buildVersion: ${{ github.event.inputs.buildVersion }}
-          tag_name: ${{ github.event.inputs.tag }}
+          tag_name: ${{ steps.resolveTag.outputs.tag }}
           target_commitish: ${{ steps.determineArtifactsForRelease.outputs.commitish }}
 
       - name: Create release
@@ -153,7 +194,7 @@ jobs:
         id: createrelease
         env:
           bodyMD: ${{ steps.createreleasenotes.outputs.releaseNotes }}
-          tag_name: ${{ github.event.inputs.tag }}
+          tag_name: ${{ steps.resolveTag.outputs.tag }}
           name: ${{ github.event.inputs.name }}
           releaseType: ${{ github.event.inputs.releaseType }}
           prerelease: ${{ github.event.inputs.releaseType == 'Prerelease' }}
