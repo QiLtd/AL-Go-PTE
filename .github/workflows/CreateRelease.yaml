@@ -287,6 +287,66 @@ jobs:
             Write-Host "No changes to repoVersion, skipping commit"
           }
 
+      - name: Update app.json version to match release
+        if: success()
+        env:
+          TAG_NAME: ${{ steps.createrelease.outputs.tag_name }}
+        run: |
+          $errorActionPreference = "Stop"; $ProgressPreference = "SilentlyContinue"; Set-StrictMode -Version 2.0
+          Write-Host "Updating app.json version to $env:TAG_NAME"
+          
+          # Find all app.json files in the repo
+          $appJsonFiles = @(Get-ChildItem -Path . -Filter 'app.json' -Recurse | Where-Object { $_.FullName -notlike '*node_modules*' -and $_.FullName -notlike '*.git*' })
+          
+          if ($appJsonFiles.Count -eq 0) {
+           Write-Host "No app.json files found, skipping app version update"
+           exit 0
+          }
+          
+          Write-Host "Found $($appJsonFiles.Count) app.json file(s)"
+          
+          $hasChanges = $false
+          foreach ($appJsonFile in $appJsonFiles) {
+           Write-Host "Updating $($appJsonFile.FullName)"
+           $appJson = Get-Content -Raw -Path $appJsonFile.FullName | ConvertFrom-Json
+            
+           # Update version if it exists
+           if ($appJson.PSObject.Properties.Name -contains 'version') {
+             $oldVersion = $appJson.version
+             $appJson.version = $env:TAG_NAME
+             if ($oldVersion -ne $env:TAG_NAME) {
+               $hasChanges = $true
+               Write-Host "  Updated version from $oldVersion to $env:TAG_NAME"
+             }
+           } else {
+             $appJson | Add-Member -NotePropertyName 'version' -NotePropertyValue $env:TAG_NAME -Force
+             $hasChanges = $true
+             Write-Host "  Added version: $env:TAG_NAME"
+           }
+            
+           $appJson | ConvertTo-Json -Depth 10 | Set-Content $appJsonFile.FullName -Encoding UTF8 -NoNewline
+          }
+          
+          # Commit and push if there were changes
+          if ($hasChanges) {
+           git config user.email "github-actions[bot]@users.noreply.github.com"
+           git config user.name "github-actions[bot]"
+           git add 'app.json'
+           git add '*/app.json'
+           $status = git status --porcelain
+           if ($status) {
+             git commit -m "chore: update app versions to $env:TAG_NAME after release" --quiet
+             & { git push 2>&1 } | Out-Null
+             if ($LASTEXITCODE -eq 0) {
+               Write-Host "Pushed app.json version updates to main"
+             } else {
+               Write-Host "Warning: git push exited with code $LASTEXITCODE"
+             }
+           }
+          } else {
+           Write-Host "No version changes needed in app.json files"
+          }
+
   UploadArtifacts:
     needs: [ CreateRelease ]
     runs-on: [ self-hosted ]
