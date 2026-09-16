@@ -277,8 +277,12 @@ jobs:
           $status = git status --porcelain
           if ($status) {
             git commit -m "chore: update repoVersion to $env:TAG_NAME after release" --quiet
-            git push 2>&1 | Out-Null
-            Write-Host "Pushed repoVersion update to main"
+            & { git push 2>&1 } | Out-Null
+            if ($LASTEXITCODE -eq 0) {
+              Write-Host "Pushed repoVersion update to main"
+            } else {
+              Write-Host "Warning: git push exited with code $LASTEXITCODE"
+            }
           } else {
             Write-Host "No changes to repoVersion, skipping commit"
           }
