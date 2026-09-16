@@ -322,10 +322,10 @@ jobs:
                 -Method POST `
                 -Body $fileContent
               
-              Write-Host "✓ Uploaded: $appFileName (ID: $($uploadResponse.Content | ConvertFrom-Json | Select-Object -ExpandProperty id))"
+              Write-Host "[OK] Uploaded: $appFileName (ID: $($uploadResponse.Content | ConvertFrom-Json | Select-Object -ExpandProperty id))"
             }
           } else {
-            Write-Host "⚠ No .app files found in artifact"
+            Write-Host "[WARNING] No .app files found in artifact"
           }
           
           # Clean up
