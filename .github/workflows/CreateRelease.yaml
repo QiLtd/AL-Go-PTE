@@ -286,50 +286,76 @@ jobs:
           MATRIX_NAME: ${{ matrix.name }}
           GITHUB_TOKEN: ${{ steps.ReadSecrets.outputs.TokenForPush }}
         run: |
-          $errorActionPreference = "Stop"; $ProgressPreference = "SilentlyContinue"; Set-StrictMode -Version 2.0
+          $errorActionPreference = "Continue"; $ProgressPreference = "SilentlyContinue"; Set-StrictMode -Version 2.0
           $zipFile = "$($ENV:MATRIX_NAME).zip"
           $extractPath = ".\release-extract"
+          
+          Write-Host "Debug: Current directory: $(Get-Location)"
+          Write-Host "Debug: Looking for zip file: $zipFile"
+          Write-Host "Debug: Files in current directory:"
+          Get-ChildItem -Path . | Format-Table -AutoSize
+          
+          # Check if zip file exists
+          if (-not (Test-Path $zipFile)) {
+            Write-Host "[ERROR] Zip file not found: $zipFile"
+            exit 1
+          }
           
           # Extract the zip file
           Write-Host "Extracting $zipFile to $extractPath"
           if (Test-Path $extractPath) { Remove-Item -Recurse -Force $extractPath }
-          Expand-Archive -Path $zipFile -DestinationPath $extractPath -Force
+          try {
+            Expand-Archive -Path $zipFile -DestinationPath $extractPath -Force
+            Write-Host "Successfully extracted archive"
+          } catch {
+            Write-Host "[ERROR] Failed to extract archive: $_"
+            exit 1
+          }
           
           # Find all .app files recursively
+          Write-Host "Debug: Contents of extracted path:"
+          Get-ChildItem -Path $extractPath -Recurse | Format-Table -AutoSize
+          
           $appFiles = @(Get-ChildItem -Path $extractPath -Filter "*.app" -Recurse)
+          Write-Host "Found $($appFiles.Count) .app file(s)"
           
           if ($appFiles.Count -gt 0) {
-            Write-Host "Found $($appFiles.Count) .app file(s)"
-            
             foreach ($appFile in $appFiles) {
               $appFileName = $appFile.Name
               Write-Host "Uploading .app file: $appFileName"
               
-              # Use gh CLI to upload release asset
-              $releaseId = $ENV:releaseId
-              $repoUrl = "https://api.github.com/repos/${{ github.repository }}/releases/$releaseId/assets"
-              
-              $headers = @{
-                "Authorization" = "token $($ENV:GITHUB_TOKEN)"
-                "X-GitHub-Api-Version" = "2022-11-28"
-                "Content-Type" = "application/octet-stream"
+              try {
+                # Use gh CLI to upload release asset
+                $releaseId = $ENV:releaseId
+                $repoUrl = "https://api.github.com/repos/${{ github.repository }}/releases/$releaseId/assets"
+                
+                $headers = @{
+                  "Authorization" = "token $($ENV:GITHUB_TOKEN)"
+                  "X-GitHub-Api-Version" = "2022-11-28"
+                  "Content-Type" = "application/octet-stream"
+                }
+                
+                $fileContent = [System.IO.File]::ReadAllBytes($appFile.FullName)
+                $uploadResponse = Invoke-WebRequest -UseBasicParsing `
+                  -Headers $headers `
+                  -Uri "$repoUrl`?name=$([System.Uri]::EscapeDataString($appFileName))" `
+                  -Method POST `
+                  -Body $fileContent
+                
+                $assetId = $uploadResponse.Content | ConvertFrom-Json | Select-Object -ExpandProperty id
+                Write-Host "[OK] Uploaded: $appFileName (ID: $assetId)"
+              } catch {
+                Write-Host "[ERROR] Failed to upload $appFileName : $_"
               }
-              
-              $fileContent = [System.IO.File]::ReadAllBytes($appFile.FullName)
-              $uploadResponse = Invoke-WebRequest -UseBasicParsing `
-                -Headers $headers `
-                -Uri "$repoUrl`?name=$([System.Uri]::EscapeDataString($appFileName))" `
-                -Method POST `
-                -Body $fileContent
-              
-              Write-Host "[OK] Uploaded: $appFileName (ID: $($uploadResponse.Content | ConvertFrom-Json | Select-Object -ExpandProperty id))"
             }
           } else {
             Write-Host "[WARNING] No .app files found in artifact"
           }
           
           # Clean up
-          Remove-Item -Recurse -Force $extractPath
+          if (Test-Path $extractPath) {
+            Remove-Item -Recurse -Force $extractPath
+          }
 
       - name: Deliver to NuGet
         uses: microsoft/AL-Go-Actions/Deliver@v9.0
