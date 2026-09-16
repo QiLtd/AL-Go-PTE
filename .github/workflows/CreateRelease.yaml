@@ -121,18 +121,41 @@ jobs:
           if ($tagInput -notin @('+1', '+0.1', '+0.0.1')) {
             throw "Unsupported incremental tag value '$tagInput'. Supported values: +1, +0.1, +0.0.1"
           }
-          $settingsPath = '.AL-Go/settings.json'
-          if (-not (Test-Path $settingsPath)) {
-            throw "Cannot resolve incremental tag: $settingsPath not found."
+          
+          # Get the latest release tag from GitHub to use as base version
+          Write-Host "Fetching latest release tag from GitHub..."
+          $latestReleaseUrl = "https://api.github.com/repos/${{ github.repository }}/releases/latest"
+          $headers = @{ "Authorization" = "token ${{ secrets.GITHUB_TOKEN }}" }
+          
+          try {
+            $latestRelease = Invoke-RestMethod -Uri $latestReleaseUrl -Headers $headers -ErrorAction SilentlyContinue
+            $baseVersion = $latestRelease.tag_name
+            Write-Host "Latest release tag: $baseVersion"
+          } catch {
+            Write-Host "No previous releases found, using default 1.0.0"
+            $baseVersion = '1.0.0'
           }
-          $settings = Get-Content -Raw -Path $settingsPath | ConvertFrom-Json
-          $baseVersion = '1.0.0'
-          if ($settings.PSObject.Properties.Name -contains 'repoVersion' -and -not [string]::IsNullOrWhiteSpace([string]$settings.repoVersion)) {
-            $baseVersion = [string]$settings.repoVersion
+          
+          # Fallback to settings.json if no GitHub tag or parsing fails
+          if ([string]::IsNullOrWhiteSpace($baseVersion) -or $baseVersion -eq 'latest') {
+            $settingsPath = '.AL-Go/settings.json'
+            if (Test-Path $settingsPath) {
+              $settings = Get-Content -Raw -Path $settingsPath | ConvertFrom-Json
+              if ($settings.PSObject.Properties.Name -contains 'repoVersion' -and -not [string]::IsNullOrWhiteSpace([string]$settings.repoVersion)) {
+                $baseVersion = [string]$settings.repoVersion
+              } else {
+                $baseVersion = '1.0.0'
+              }
+            } else {
+              $baseVersion = '1.0.0'
+            }
           }
+          
+          Write-Host "Using base version: $baseVersion"
+          
           $parts = $baseVersion.Split('.')
           if ($parts.Count -lt 2 -or $parts.Count -gt 3) {
-            throw "repoVersion '$baseVersion' must be major.minor or major.minor.build to use incremental tag input."
+            throw "Version '$baseVersion' must be major.minor or major.minor.build to use incremental tag input."
           }
           $major = [int]$parts[0]
           $minor = [int]$parts[1]
@@ -143,6 +166,7 @@ jobs:
             '+0.0.1' { $build++ }
           }
           $resolvedTag = "$major.$minor.$build"
+          Write-Host "Resolved tag: $resolvedTag"
           Add-Content -Path $env:GITHUB_OUTPUT -Value "tag=$resolvedTag"
 
       - name: Read secrets
