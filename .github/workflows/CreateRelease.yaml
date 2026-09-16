@@ -242,6 +242,39 @@ jobs:
               data: { id: releaseId, html_url: htmlUrl, upload_url: uploadUrl }
             } = createReleaseResponse;
             core.setOutput('releaseId', releaseId);
+            core.setOutput('tag_name', process.env.tag_name);
+
+      - name: Update repoVersion in settings
+        if: success()
+        env:
+          TAG_NAME: ${{ steps.createrelease.outputs.tag_name }}
+        run: |
+          $errorActionPreference = "Stop"; $ProgressPreference = "SilentlyContinue"; Set-StrictMode -Version 2.0
+          Write-Host "Updating repoVersion to $env:TAG_NAME"
+          $settingsPath = '.\.github\AL-Go-Settings.json'
+          
+          if (-not (Test-Path $settingsPath)) {
+            Write-Host "Warning: $settingsPath not found, skipping repoVersion update"
+            exit 0
+          }
+          
+          $settings = Get-Content -Raw -Path $settingsPath | ConvertFrom-Json
+          $settings.repoVersion = $env:TAG_NAME
+          $settings | ConvertTo-Json -Depth 10 | Set-Content $settingsPath -Encoding UTF8 -NoNewline
+          Write-Host "Updated repoVersion to $env:TAG_NAME"
+          
+          # Commit and push the change
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git add '.\.github\AL-Go-Settings.json'
+          $status = git status --porcelain
+          if ($status) {
+            git commit -m "chore: update repoVersion to $env:TAG_NAME after release" --quiet
+            git push 2>&1 | Out-Null
+            Write-Host "Pushed repoVersion update to main"
+          } else {
+            Write-Host "No changes to repoVersion, skipping commit"
+          }
 
   UploadArtifacts:
     needs: [ CreateRelease ]
