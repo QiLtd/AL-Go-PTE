@@ -48,11 +48,8 @@
 
   "runs-on": "windows-latest",
   "runsOn": [ "self-hosted", "windows", "x64" ],
-  "githubRunner": "windows-latest",
-  "githubRunnerShell": "powershell",
 
   "shell": "powershell",
-  "keyVaultName": "",
 
   "nuGetFeedSelectMode": "LatestMatching",
   "trustMicrosoftNuGetFeeds": true,
