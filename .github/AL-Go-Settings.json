@@ -1,6 +1,110 @@
 {
-  "$schema": "https://raw.githubusercontent.com/microsoft/AL-Go-Actions/v9.2/.Modules/settings.schema.json",
   "type": "PTE",
+  "country": "gb",
+  "appFolders": [ "." ],
   "templateUrl": "https://github.com/QiLtd/AL-Go-PTE@main",
-  "repoVersion": "28.0.0"
+
+  "workspaceCompilation": {
+    "enabled": true,
+    "parallelism": 12
+  },
+
+  "incrementalBuilds": {
+    "onPush": false,
+    "onPull_Request": true,
+    "onSchedule": false,
+    "retentionDays": 30,
+    "mode": "modifiedApps"
+  },
+
+  "cacheImageName": "bc-cache-32gb",
+  "cacheKeepDays": 7,
+
+  "enableCodeAnalyzersOnTestApps": false,
+  "enableCodeCop": false,
+  "enableUICop": false,
+
+  "doNotBuildTests": false,
+  "doNotRunTests": false,
+  "skipUpdatingDependencies": true,
+  "installOnlyReferencedApps": true,
+
+  "shortLivedArtifactsRetentionDays": 1,
+
+  "versioningStrategy": 3,
+  "runNumberOffset": 0,
+  "appBuild": -1,
+  "appRevision": 0,
+
+  "installTestFramework": false,
+  "installTestRunner": false,
+  "installTestLibraries": false,
+  "installPerformanceToolkit": false,
+  "installOnlyReferencedApps": true,
+
+  "testFolders": [],
+  "testDependencies": [],
+  "projectsToTest": [],
+
+  "runs-on": "windows-latest",
+  "runsOn": [ "self-hosted", "windows", "x64" ],
+  "githubRunner": "windows-latest",
+  "githubRunnerShell": "powershell",
+
+  "shell": "powershell",
+  "keyVaultName": "",
+
+  "nuGetFeedSelectMode": "LatestMatching",
+  "trustMicrosoftNuGetFeeds": true,
+
+  "sendExtendedTelemetryToMicrosoft": false,
+  "doNotPublishApps": false,
+
+  "commitOptions": {
+    "createPullRequest": true,
+    "pullRequestAutoMerge": false,
+    "pullRequestMergeMethod": "squash",
+    "pullRequestLabels": [],
+    "messageSuffix": ""
+  },
+
+  "features": [],
+  "customCodeCops": [],
+  "preprocessorSymbols": [],
+  "additionalCountries": [],
+  "excludeEnvironments": [],
+  "environments": [],
+  "buildModes": [],
+
+  "deliverToAppSource": {
+    "mainAppFolder": "",
+    "productId": "",
+    "includeDependencies": [],
+    "continuousDelivery": false
+  },
+
+  "alDoc": {
+    "continuousDeployment": false,
+    "deployToGitHubPages": true,
+    "maxReleases": 3,
+    "groupByProject": true,
+    "includeProjects": [],
+    "excludeProjects": []
+  },
+
+  "memoryLimit": "",
+  "useGitSubmodules": false,
+  "useProjectDependencies": false,
+  "useCompilerFolder": false,
+  "fullBuildPatterns": [],
+  "postponeProjectInBuildOrder": false,
+  "alwaysBuildAllProjects": false,
+  "skipUpgrade": false,
+  "updateDependencies": false,
+
+  "assignPremiumPlan": false,
+  "enableTaskScheduler": false,
+  "enableExternalRulesets": false,
+  "reportSuppressedDiagnostics": false,
+  "trackALAlertsInGitHub": false
 }
