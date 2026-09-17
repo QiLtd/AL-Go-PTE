@@ -238,116 +238,11 @@ jobs:
               make_latest: 'legacy',
               target_commitish: process.env.commitish
             });
-            const {
-              data: { id: releaseId, html_url: htmlUrl, upload_url: uploadUrl }
-            } = createReleaseResponse;
-            core.setOutput('releaseId', releaseId);
-            core.setOutput('tag_name', process.env.tag_name);
-
-      - name: Update repoVersion in settings
-        if: success()
-        env:
-          TAG_NAME: ${{ steps.createrelease.outputs.tag_name }}
-        run: |
-          $errorActionPreference = "Stop"; $ProgressPreference = "SilentlyContinue"; Set-StrictMode -Version 2.0
-          Write-Host "Updating repoVersion to $env:TAG_NAME"
-          $settingsPath = '.\.github\AL-Go-Settings.json'
-          
-          if (-not (Test-Path $settingsPath)) {
-            Write-Host "Warning: $settingsPath not found, skipping repoVersion update"
-            exit 0
-          }
-          
-          $settings = Get-Content -Raw -Path $settingsPath | ConvertFrom-Json
-          
-          # Add or update repoVersion property
-          if ($settings.PSObject.Properties.Name -contains 'repoVersion') {
-            $settings.repoVersion = $env:TAG_NAME
-          } else {
-            $settings | Add-Member -NotePropertyName 'repoVersion' -NotePropertyValue $env:TAG_NAME -Force
-          }
-          
-          $settings | ConvertTo-Json -Depth 10 | Set-Content $settingsPath -Encoding UTF8 -NoNewline
-          Write-Host "Updated repoVersion to $env:TAG_NAME"
-          
-          # Commit and push the change
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git config user.name "github-actions[bot]"
-          git add '.\.github\AL-Go-Settings.json'
-          $status = git status --porcelain
-          if ($status) {
-            git commit -m "chore: update repoVersion to $env:TAG_NAME after release" --quiet
-            git push
-            if ($LASTEXITCODE -eq 0) {
-              Write-Host "Pushed repoVersion update to main"
-            } else {
-              Write-Host "Warning: git push exited with code $LASTEXITCODE"
-              exit 1
-            }
-          } else {
-            Write-Host "No changes to repoVersion, skipping commit"
-          }
-
-      - name: Update app.json version to match release
-        if: success()
-        env:
-          TAG_NAME: ${{ steps.createrelease.outputs.tag_name }}
-        run: |
-          $errorActionPreference = "Stop"; $ProgressPreference = "SilentlyContinue"; Set-StrictMode -Version 2.0
-          Write-Host "Updating app.json version to $env:TAG_NAME"
-          
-          # Find all app.json files in the repo
-          $appJsonFiles = @(Get-ChildItem -Path . -Filter 'app.json' -Recurse | Where-Object { $_.FullName -notlike '*node_modules*' -and $_.FullName -notlike '*.git*' })
-          
-          if ($appJsonFiles.Count -eq 0) {
-           Write-Host "No app.json files found, skipping app version update"
-           exit 0
-          }
-          
-          Write-Host "Found $($appJsonFiles.Count) app.json file(s)"
-          
-          $hasChanges = $false
-          foreach ($appJsonFile in $appJsonFiles) {
-           Write-Host "Updating $($appJsonFile.FullName)"
-           $appJson = Get-Content -Raw -Path $appJsonFile.FullName | ConvertFrom-Json
-            
-           # Update version if it exists
-           if ($appJson.PSObject.Properties.Name -contains 'version') {
-             $oldVersion = $appJson.version
-             $appJson.version = $env:TAG_NAME
-             if ($oldVersion -ne $env:TAG_NAME) {
-               $hasChanges = $true
-               Write-Host "  Updated version from $oldVersion to $env:TAG_NAME"
-             }
-           } else {
-             $appJson | Add-Member -NotePropertyName 'version' -NotePropertyValue $env:TAG_NAME -Force
-             $hasChanges = $true
-             Write-Host "  Added version: $env:TAG_NAME"
-           }
-            
-           $appJson | ConvertTo-Json -Depth 10 | Set-Content $appJsonFile.FullName -Encoding UTF8 -NoNewline
-          }
-          
-          # Commit and push if there were changes
-          if ($hasChanges) {
-           git config user.email "github-actions[bot]@users.noreply.github.com"
-           git config user.name "github-actions[bot]"
-           git add 'app.json'
-           git add '*/app.json'
-           $status = git status --porcelain
-           if ($status) {
-             git commit -m "chore: update app versions to $env:TAG_NAME after release" --quiet
-             git push
-             if ($LASTEXITCODE -eq 0) {
-               Write-Host "Pushed app.json version updates to main"
-             } else {
-               Write-Host "Warning: git push exited with code $LASTEXITCODE"
-               exit 1
-             }
-           }
-          } else {
-           Write-Host "No version changes needed in app.json files"
-          }
+           const {
+             data: { id: releaseId, html_url: htmlUrl, upload_url: uploadUrl }
+           } = createReleaseResponse;
+           core.setOutput('releaseId', releaseId);
+           core.setOutput('tag_name', process.env.tag_name);
 
   UploadArtifacts:
     needs: [ CreateRelease ]
@@ -536,6 +431,70 @@ jobs:
           git commit --allow-empty -m "Release branch $releaseBranch"
           git push origin $releaseBranch
 
+  SyncReleaseVersions:
+    needs: [ CreateRelease, UploadArtifacts ]
+    runs-on: [ self-hosted ]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Read secrets
+        id: ReadSecrets
+        uses: microsoft/AL-Go-Actions/ReadSecrets@v9.0
+        with:
+          shell: powershell
+          gitHubSecrets: ${{ toJson(secrets) }}
+          getSecrets: 'TokenForPush'
+          useGhTokenWorkflowForPush: '${{ github.event.inputs.useGhTokenWorkflow }}'
+
+      - name: Update repoVersion and app.json versions
+        env:
+          TAG_NAME: ${{ needs.CreateRelease.outputs.releaseVersion }}
+          GITHUB_TOKEN: ${{ steps.ReadSecrets.outputs.TokenForPush }}
+        run: |
+          $errorActionPreference = "Stop"; $ProgressPreference = "SilentlyContinue"; Set-StrictMode -Version 2.0
+          Write-Host "Syncing release version $env:TAG_NAME to repository"
+          
+          # Update repoVersion in settings
+          $settingsPath = '.\.github\AL-Go-Settings.json'
+          if (Test-Path $settingsPath) {
+            $settings = Get-Content -Raw -Path $settingsPath | ConvertFrom-Json
+            $oldRepoVersion = $settings.repoVersion
+            $settings.repoVersion = $env:TAG_NAME
+            $settings | ConvertTo-Json -Depth 10 | Set-Content $settingsPath -Encoding UTF8 -NoNewline
+            Write-Host "Updated repoVersion from $oldRepoVersion to $env:TAG_NAME"
+          }
+          
+          # Update versions in app.json files
+          $appJsonFiles = @(Get-ChildItem -Path . -Filter 'app.json' -Recurse | Where-Object { $_.FullName -notlike '*node_modules*' -and $_.FullName -notlike '*.git*' })
+          foreach ($appJsonFile in $appJsonFiles) {
+            $appJson = Get-Content -Raw -Path $appJsonFile.FullName | ConvertFrom-Json
+            $oldAppVersion = $appJson.version
+            $appJson.version = $env:TAG_NAME
+            $appJson | ConvertTo-Json -Depth 10 | Set-Content $appJsonFile.FullName -Encoding UTF8 -NoNewline
+            Write-Host "Updated app version in $($appJsonFile.Name) from $oldAppVersion to $env:TAG_NAME"
+          }
+          
+          # Commit and push all changes
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git add '.\.github\AL-Go-Settings.json'
+          git add 'app.json'
+          git add '*/app.json'
+          $status = git status --porcelain
+          if ($status) {
+            git commit -m "chore: sync version $env:TAG_NAME after release" --quiet
+            git push
+            if ($LASTEXITCODE -eq 0) {
+              Write-Host "Pushed version sync commit to main"
+            } else {
+              Write-Host "Warning: git push exited with code $LASTEXITCODE"
+              exit 1
+            }
+          } else {
+            Write-Host "No version changes detected"
+          }
+
   UpdateVersionNumber:
     needs: [ CreateRelease, UploadArtifacts ]
     if: ${{ github.event.inputs.updateVersionNumber!='' }}
@@ -568,7 +527,7 @@ jobs:
           directCommit: ${{ github.event.inputs.directCommit }}
 
   PostProcess:
-    needs: [ CreateRelease, UploadArtifacts, CreateReleaseBranch, UpdateVersionNumber ]
+    needs: [ CreateRelease, UploadArtifacts, CreateReleaseBranch, UpdateVersionNumber, SyncReleaseVersions ]
     if: always()
     runs-on: [ self-hosted ]
     steps:
