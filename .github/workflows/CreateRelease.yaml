@@ -329,14 +329,19 @@ jobs:
           $appFiles = @(Get-ChildItem -Path $extractPath -Filter "*.app" -Recurse)
           Write-Host "Found $($appFiles.Count) .app file(s)"
           foreach ($appFile in $appFiles) {
-            $dest = Join-Path $appsPath $appFile.Name
+            $staged = Join-Path $appsPath $appFile.Name
             $i = 1
-            while (Test-Path $dest) {
-              $dest = Join-Path $appsPath ("$($appFile.BaseName)_$i$($appFile.Extension)")
+            while (Test-Path $staged) {
+              $staged = Join-Path $appsPath ("$($appFile.BaseName)_$i$($appFile.Extension)")
               $i++
             }
-            Copy-Item -Path $appFile.FullName -Destination $dest -Force
-            Write-Host "Staged $($appFile.Name)"
+            Copy-Item -Path $appFile.FullName -Destination $staged -Force
+            # GitHub blocks the .app extension on release assets, so wrap each
+            # .app in its own zip (e.g. MyApp_1.0.0.0.app.zip) which is allowed.
+            $zipDest = "$staged.zip"
+            Compress-Archive -Path $staged -DestinationPath $zipDest -Force
+            Remove-Item -Path $staged -Force
+            Write-Host "Staged and zipped $($appFile.Name) -> $(Split-Path $zipDest -Leaf)"
           }
 
           Remove-Item -Recurse -Force $extractPath
@@ -356,10 +361,10 @@ jobs:
               core.info('No release-apps directory found; skipping .app upload');
               return;
             }
-            const files = fs.readdirSync(appsDir).filter(f => f.toLowerCase().endsWith('.app'));
-            core.info(`Uploading ${files.length} .app file(s) to release ${releaseId}`);
+            const files = fs.readdirSync(appsDir).filter(f => f.toLowerCase().endsWith('.app.zip'));
+            core.info(`Uploading ${files.length} .app.zip file(s) to release ${releaseId}`);
             if (files.length === 0) {
-              core.warning('No .app files were staged for upload');
+              core.warning('No .app.zip files were staged for upload');
             }
             for (const file of files) {
               const assetPath = path.join(appsDir, file);
