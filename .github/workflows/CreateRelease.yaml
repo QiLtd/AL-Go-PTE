@@ -277,11 +277,12 @@ jobs:
           $status = git status --porcelain
           if ($status) {
             git commit -m "chore: update repoVersion to $env:TAG_NAME after release" --quiet
-            & { git push 2>&1 } | Out-Null
+            git push
             if ($LASTEXITCODE -eq 0) {
               Write-Host "Pushed repoVersion update to main"
             } else {
               Write-Host "Warning: git push exited with code $LASTEXITCODE"
+              exit 1
             }
           } else {
             Write-Host "No changes to repoVersion, skipping commit"
@@ -336,11 +337,12 @@ jobs:
            $status = git status --porcelain
            if ($status) {
              git commit -m "chore: update app versions to $env:TAG_NAME after release" --quiet
-             & { git push 2>&1 } | Out-Null
+             git push
              if ($LASTEXITCODE -eq 0) {
                Write-Host "Pushed app.json version updates to main"
              } else {
                Write-Host "Warning: git push exited with code $LASTEXITCODE"
+               exit 1
              }
            }
           } else {
