@@ -1,5 +1,5 @@
 name: ' Create release'
-run-name: "Create release - Version ${{ inputs.tag }}"
+run-name: "Create release - ${{ inputs.name }}"
 
 concurrency:
   group: ${{ github.workflow }}
@@ -13,10 +13,6 @@ on:
         default: 'latest'
       name:
         description: Name of this release
-        required: true
-        default: ''
-      tag:
-        description: Tag of this release (semantic version like 1.0.0, or incremental +1, +0.1, +0.0.1)
         required: true
         default: ''
       releaseType:
@@ -98,77 +94,6 @@ jobs:
           shell: powershell
           get: templateUrl,repoName,type,powerPlatformSolutionFolder
 
-      - name: Validate Workflow Input
-        if: ${{ github.event_name == 'workflow_dispatch' && !startsWith(github.event.inputs.tag, '+') }}
-        uses: microsoft/AL-Go-Actions/ValidateWorkflowInput@v9.0
-        with:
-          shell: powershell
-
-      - name: Resolve tag input
-        id: resolveTag
-        env:
-          INPUT_TAG: ${{ github.event.inputs.tag }}
-        run: |
-          $errorActionPreference = "Stop"; $ProgressPreference = "SilentlyContinue"; Set-StrictMode -Version 2.0
-          $tagInput = "$env:INPUT_TAG".Trim()
-          if ([string]::IsNullOrWhiteSpace($tagInput)) {
-            throw "Tag input cannot be empty."
-          }
-          if (-not $tagInput.StartsWith('+')) {
-            Add-Content -Path $env:GITHUB_OUTPUT -Value "tag=$tagInput"
-            exit 0
-          }
-          if ($tagInput -notin @('+1', '+0.1', '+0.0.1')) {
-            throw "Unsupported incremental tag value '$tagInput'. Supported values: +1, +0.1, +0.0.1"
-          }
-          
-          # Get the latest release tag from GitHub to use as base version
-          Write-Host "Fetching latest release tag from GitHub..."
-          $latestReleaseUrl = "https://api.github.com/repos/${{ github.repository }}/releases/latest"
-          $headers = @{ "Authorization" = "token ${{ secrets.GITHUB_TOKEN }}" }
-          
-          try {
-            $latestRelease = Invoke-RestMethod -Uri $latestReleaseUrl -Headers $headers -ErrorAction SilentlyContinue
-            $baseVersion = $latestRelease.tag_name
-            Write-Host "Latest release tag: $baseVersion"
-          } catch {
-            Write-Host "No previous releases found, using default 1.0.0"
-            $baseVersion = '1.0.0'
-          }
-          
-          # Fallback to settings.json if no GitHub tag or parsing fails
-          if ([string]::IsNullOrWhiteSpace($baseVersion) -or $baseVersion -eq 'latest') {
-            $settingsPath = '.AL-Go/settings.json'
-            if (Test-Path $settingsPath) {
-              $settings = Get-Content -Raw -Path $settingsPath | ConvertFrom-Json
-              if ($settings.PSObject.Properties.Name -contains 'repoVersion' -and -not [string]::IsNullOrWhiteSpace([string]$settings.repoVersion)) {
-                $baseVersion = [string]$settings.repoVersion
-              } else {
-                $baseVersion = '1.0.0'
-              }
-            } else {
-              $baseVersion = '1.0.0'
-            }
-          }
-          
-          Write-Host "Using base version: $baseVersion"
-          
-          $parts = $baseVersion.Split('.')
-          if ($parts.Count -lt 2 -or $parts.Count -gt 3) {
-            throw "Version '$baseVersion' must be major.minor or major.minor.build to use incremental tag input."
-          }
-          $major = [int]$parts[0]
-          $minor = [int]$parts[1]
-          $build = if ($parts.Count -eq 3) { [int]$parts[2] } else { 0 }
-          switch ($tagInput) {
-            '+1'     { $major++; $minor = 0; $build = 0 }
-            '+0.1'   { $minor++; $build = 0 }
-            '+0.0.1' { $build++ }
-          }
-          $resolvedTag = "$major.$minor.$build"
-          Write-Host "Resolved tag: $resolvedTag"
-          Add-Content -Path $env:GITHUB_OUTPUT -Value "tag=$resolvedTag"
-
       - name: Read secrets
         id: ReadSecrets
         uses: microsoft/AL-Go-Actions/ReadSecrets@v9.0
@@ -203,6 +128,34 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           TOKENFORPUSH: ${{ steps.ReadSecrets.outputs.TokenForPush }}
           ProjectsJson: ${{ steps.determineProjects.outputs.ProjectsJson }}
+
+      - name: Resolve tag from built app version
+        id: resolveTag
+        env:
+          ARTIFACTS: ${{ steps.determineArtifactsForRelease.outputs.artifacts }}
+        run: |
+          $errorActionPreference = "Stop"; $ProgressPreference = "SilentlyContinue"; Set-StrictMode -Version 2.0
+          if ([string]::IsNullOrWhiteSpace($env:ARTIFACTS)) {
+            throw "No artifacts were determined for release; cannot derive a tag. Make sure a successful build exists for the selected build version."
+          }
+          $artifacts = $env:ARTIFACTS | ConvertFrom-Json
+          $items = @($artifacts.include)
+          $appArtifact = @($items | Where-Object { $_.atype -eq 'Apps' }) | Select-Object -First 1
+          if ($null -eq $appArtifact) { $appArtifact = $items | Select-Object -First 1 }
+          if ($null -eq $appArtifact) {
+            throw "No artifacts found in the release matrix; cannot derive a tag."
+          }
+          $name = $appArtifact.name
+          Write-Host "Deriving release tag from artifact: $name"
+          # Artifact names look like '<Repo>-<branch>-Apps-<major>.<minor>.<build>.<revision>'
+          $m = [regex]::Match($name, '(\d+)\.(\d+)\.(\d+)\.(\d+)$')
+          if (-not $m.Success) { $m = [regex]::Match($name, '(\d+)\.(\d+)\.(\d+)$') }
+          if (-not $m.Success) {
+            throw "Could not parse a version from artifact name '$name'."
+          }
+          $tag = "$($m.Groups[1].Value).$($m.Groups[2].Value).$($m.Groups[3].Value)"
+          Write-Host "Resolved release tag (major.minor.patch): $tag"
+          Add-Content -Path $env:GITHUB_OUTPUT -Value "tag=$tag"
 
       - name: Prepare release notes
         id: createreleasenotes
@@ -354,73 +307,6 @@ jobs:
           git commit --allow-empty -m "Release branch $releaseBranch"
           git push origin $releaseBranch
 
-  SyncReleaseVersions:
-    needs: [ CreateRelease, UploadArtifacts ]
-    runs-on: [ self-hosted ]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
-      - name: Update repoVersion and app.json versions
-        env:
-          TAG_NAME: ${{ needs.CreateRelease.outputs.releaseVersion }}
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          $errorActionPreference = "Stop"; $ProgressPreference = "SilentlyContinue"; Set-StrictMode -Version 2.0
-          Write-Host "Syncing release version $env:TAG_NAME to repository"
-          
-          # Update repoVersion in settings
-          $settingsPath = '.\.github\AL-Go-Settings.json'
-          if (Test-Path $settingsPath) {
-            $settings = Get-Content -Raw -Path $settingsPath | ConvertFrom-Json
-            $oldRepoVersion = $settings.repoVersion
-            $settings.repoVersion = $env:TAG_NAME
-            $settings | ConvertTo-Json -Depth 10 | Set-Content $settingsPath -Encoding UTF8 -NoNewline
-            Write-Host "Updated repoVersion from $oldRepoVersion to $env:TAG_NAME"
-          }
-          
-          # Update versions in app.json files
-          $appJsonFiles = @(Get-ChildItem -Path . -Filter 'app.json' -Recurse | Where-Object { $_.FullName -notlike '*node_modules*' -and $_.FullName -notlike '*.git*' })
-          foreach ($appJsonFile in $appJsonFiles) {
-            $appJson = Get-Content -Raw -Path $appJsonFile.FullName | ConvertFrom-Json
-            $oldAppVersion = $appJson.version
-            $appJson.version = $env:TAG_NAME
-            $appJson | ConvertTo-Json -Depth 10 | Set-Content $appJsonFile.FullName -Encoding UTF8 -NoNewline
-            Write-Host "Updated app version in $($appJsonFile.Name) from $oldAppVersion to $env:TAG_NAME"
-          }
-          
-          # Commit and push all changes
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git config user.name "github-actions[bot]"
-          git add '.\.github\AL-Go-Settings.json'
-          git add 'app.json'
-          git add '*/app.json'
-          $status = git status --porcelain
-          if ($status) {
-            git commit -m "chore: sync version $env:TAG_NAME after release" --quiet
-            $pushed = $false
-            for ($attempt = 1; $attempt -le 3; $attempt++) {
-              git push
-              if ($LASTEXITCODE -eq 0) { $pushed = $true; break }
-              Write-Host "Push attempt $attempt failed; rebasing on latest origin/main and retrying..."
-              git fetch origin main
-              git rebase origin/main
-              if ($LASTEXITCODE -ne 0) {
-                git rebase --abort
-                Write-Host "::warning::Rebase failed on attempt $attempt"
-              }
-            }
-            if ($pushed) {
-              Write-Host "Pushed version sync commit to main"
-            } else {
-              Write-Host "::error::Failed to push version sync after 3 attempts"
-              exit 1
-            }
-          } else {
-            Write-Host "No version changes detected"
-          }
-
-
   UpdateVersionNumber:
     needs: [ CreateRelease, UploadArtifacts ]
     if: ${{ github.event.inputs.updateVersionNumber!='' }}
@@ -453,7 +339,7 @@ jobs:
           directCommit: ${{ github.event.inputs.directCommit }}
 
   PostProcess:
-    needs: [ CreateRelease, UploadArtifacts, CreateReleaseBranch, UpdateVersionNumber, SyncReleaseVersions ]
+    needs: [ CreateRelease, UploadArtifacts, CreateReleaseBranch, UpdateVersionNumber ]
     if: always()
     runs-on: [ self-hosted ]
     steps:
