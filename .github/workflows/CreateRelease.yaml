@@ -438,19 +438,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Read secrets
-        id: ReadSecrets
-        uses: microsoft/AL-Go-Actions/ReadSecrets@v9.0
-        with:
-          shell: powershell
-          gitHubSecrets: ${{ toJson(secrets) }}
-          getSecrets: 'TokenForPush'
-          useGhTokenWorkflowForPush: '${{ github.event.inputs.useGhTokenWorkflow }}'
-
       - name: Update repoVersion and app.json versions
         env:
           TAG_NAME: ${{ needs.CreateRelease.outputs.releaseVersion }}
-          GITHUB_TOKEN: ${{ steps.ReadSecrets.outputs.TokenForPush }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           $errorActionPreference = "Stop"; $ProgressPreference = "SilentlyContinue"; Set-StrictMode -Version 2.0
           Write-Host "Syncing release version $env:TAG_NAME to repository"
@@ -494,6 +485,7 @@ jobs:
           } else {
             Write-Host "No version changes detected"
           }
+
 
   UpdateVersionNumber:
     needs: [ CreateRelease, UploadArtifacts ]
