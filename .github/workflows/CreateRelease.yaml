@@ -238,11 +238,11 @@ jobs:
               make_latest: 'legacy',
               target_commitish: process.env.commitish
             });
-           const {
-             data: { id: releaseId, html_url: htmlUrl, upload_url: uploadUrl }
-           } = createReleaseResponse;
-           core.setOutput('releaseId', releaseId);
-           core.setOutput('tag_name', process.env.tag_name);
+            const {
+              data: { id: releaseId, html_url: htmlUrl, upload_url: uploadUrl }
+            } = createReleaseResponse;
+            core.setOutput('releaseId', releaseId);
+            core.setOutput('tag_name', process.env.tag_name);
 
   UploadArtifacts:
     needs: [ CreateRelease ]
