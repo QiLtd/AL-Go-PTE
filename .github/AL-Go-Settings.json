@@ -6,7 +6,7 @@
 
   "workspaceCompilation": {
     "enabled": true,
-    "parallelism": 12
+    "parallelism": 4
   },
 
   "incrementalBuilds": {
