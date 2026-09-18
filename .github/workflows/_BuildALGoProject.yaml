@@ -111,6 +111,27 @@ jobs:
           buildMode: ${{ inputs.buildMode }}
           get: useCompilerFolder,workspaceCompilation,keyVaultCodesignCertificateName,doNotSignApps,doNotRunTests,doNotRunBcptTests,doNotRunpageScriptingTests,artifact,generateDependencyArtifact,trustedSigning,useGitSubmodules,trackALAlertsInGitHub,skipUpgrade
 
+      - name: Force app revision to zero
+        if: github.event_name != 'pull_request' && github.event_name != 'pull_request_target' && github.event_name != 'merge_group'
+        shell: ${{ inputs.shell }}
+        run: |
+          $errorActionPreference = "Stop"; $ProgressPreference = "SilentlyContinue"; Set-StrictMode -Version 2.0
+          if ([string]::IsNullOrWhiteSpace($env:Settings)) {
+            Write-Host "Settings env not set; skipping appRevision override"
+            exit 0
+          }
+          $settings = $env:Settings | ConvertFrom-Json
+          $old = '(unset)'
+          if ($settings.PSObject.Properties.Name -contains 'appRevision') {
+            $old = $settings.appRevision
+            $settings.appRevision = 0
+          } else {
+            $settings | Add-Member -NotePropertyName 'appRevision' -NotePropertyValue 0 -Force
+          }
+          $json = $settings | ConvertTo-Json -Depth 99 -Compress
+          Add-Content -Encoding UTF8 -Path $env:GITHUB_ENV -Value "Settings=$json"
+          Write-Host "Forced appRevision from $old to 0 (app version now Major.Minor.Build.0)"
+
       - name: Run Build Initialize hook
         if: hashFiles(format('{0}/.AL-Go/BuildInitialize.ps1', inputs.project)) != ''
         uses: microsoft/AL-Go-Actions/RunHook@v9.2
