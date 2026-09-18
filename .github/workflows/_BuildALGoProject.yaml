@@ -113,7 +113,6 @@ jobs:
 
       - name: Force app revision to zero
         if: github.event_name != 'pull_request' && github.event_name != 'pull_request_target' && github.event_name != 'merge_group'
-        shell: ${{ inputs.shell }}
         run: |
           $errorActionPreference = "Stop"; $ProgressPreference = "SilentlyContinue"; Set-StrictMode -Version 2.0
           if ([string]::IsNullOrWhiteSpace($env:Settings)) {
