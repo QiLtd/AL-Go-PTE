@@ -46,8 +46,8 @@
   "testDependencies": [],
   "projectsToTest": [],
 
-  "runs-on": "windows-latest",
-  "runsOn": [ "self-hosted", "windows", "x64" ],
+  "runs-on": "self-hosted",
+  "githubRunner": "self-hosted",
 
   "shell": "powershell",
 
