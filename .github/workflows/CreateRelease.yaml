@@ -67,7 +67,7 @@ jobs:
     needs: [ ]
     runs-on: [ self-hosted ]
     outputs:
-      artifacts: ${{ steps.determineArtifactsForRelease.outputs.artifacts }}
+      artifacts: ${{ steps.dedupeArtifacts.outputs.artifacts }}
       releaseId: ${{ steps.createrelease.outputs.releaseId }}
       commitish: ${{ steps.determineArtifactsForRelease.outputs.commitish }}
       releaseVersion: ${{ steps.createreleasenotes.outputs.releaseVersion }}
@@ -129,10 +129,38 @@ jobs:
           TOKENFORPUSH: ${{ steps.ReadSecrets.outputs.TokenForPush }}
           ProjectsJson: ${{ steps.determineProjects.outputs.ProjectsJson }}
 
+      - name: Deduplicate release artifacts
+        id: dedupeArtifacts
+        env:
+          ARTIFACTS: ${{ steps.determineArtifactsForRelease.outputs.artifacts }}
+        run: |
+          $errorActionPreference = "Stop"; $ProgressPreference = "SilentlyContinue"; Set-StrictMode -Version 2.0
+          if ([string]::IsNullOrWhiteSpace($env:ARTIFACTS)) {
+            throw "No artifacts were determined for release. Make sure a successful build exists for the selected build version."
+          }
+          $items = @(($env:ARTIFACTS | ConvertFrom-Json).include)
+          Write-Host "Release matrix contains $($items.Count) artifact(s) before de-duplication"
+          $artifactId = {
+            $u = ''
+            if ($_.PSObject.Properties.Name -contains 'url') { $u = [string]$_.url }
+            if ($u -match '/artifacts/(\d+)') { [int64]$Matches[1] } else { [int64]0 }
+          }
+          $kept = @()
+          foreach ($group in ($items | Group-Object -Property name)) {
+            $newest = $group.Group | Sort-Object -Property @{ Expression = $artifactId } -Descending | Select-Object -First 1
+            if ($group.Count -gt 1) {
+              Write-Host "::warning::$($group.Count) artifacts are named '$($group.Name)'. appRevision is pinned to 0, so repeated builds of the same app.json version produce colliding artifact names. Keeping the newest and ignoring $($group.Count - 1) older one(s)."
+            }
+            $kept += $newest
+          }
+          Write-Host "Release matrix contains $($kept.Count) artifact(s) after de-duplication"
+          $json = '{"include":[' + (($kept | ForEach-Object { $_ | ConvertTo-Json -Depth 99 -Compress }) -join ',') + ']}'
+          Add-Content -Encoding UTF8 -Path $env:GITHUB_OUTPUT -Value "artifacts=$json"
+
       - name: Resolve tag from built app version
         id: resolveTag
         env:
-          ARTIFACTS: ${{ steps.determineArtifactsForRelease.outputs.artifacts }}
+          ARTIFACTS: ${{ steps.dedupeArtifacts.outputs.artifacts }}
         run: |
           $errorActionPreference = "Stop"; $ProgressPreference = "SilentlyContinue"; Set-StrictMode -Version 2.0
           if ([string]::IsNullOrWhiteSpace($env:ARTIFACTS)) {
