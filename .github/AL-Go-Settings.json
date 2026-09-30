@@ -1,14 +1,14 @@
 {
   "type": "PTE",
   "country": "gb",
-  "appFolders": [ "." ],
+  "appFolders": [
+    "."
+  ],
   "templateUrl": "https://github.com/QiLtd/AL-Go-PTE@main",
-
   "workspaceCompilation": {
     "enabled": true,
     "parallelism": 4
   },
-
   "incrementalBuilds": {
     "onPush": false,
     "onPull_Request": true,
@@ -16,47 +16,34 @@
     "retentionDays": 30,
     "mode": "modifiedApps"
   },
-
   "cacheImageName": "bc-cache-32gb",
   "cacheKeepDays": 7,
-
   "enableCodeAnalyzersOnTestApps": false,
   "enableCodeCop": false,
   "enableUICop": false,
-
   "doNotBuildTests": false,
   "doNotRunTests": false,
   "skipUpdatingDependencies": true,
-  "installOnlyReferencedApps": true,
-
   "shortLivedArtifactsRetentionDays": 1,
-
   "versioningStrategy": 3,
   "runNumberOffset": 0,
   "appBuild": -1,
   "appRevision": 0,
-
   "installTestFramework": false,
   "installTestRunner": false,
   "installTestLibraries": false,
   "installPerformanceToolkit": false,
   "installOnlyReferencedApps": true,
-
   "testFolders": [],
   "testDependencies": [],
   "projectsToTest": [],
-
   "runs-on": "self-hosted",
   "githubRunner": "self-hosted",
-
   "shell": "powershell",
-
   "nuGetFeedSelectMode": "LatestMatching",
   "trustMicrosoftNuGetFeeds": true,
-
   "sendExtendedTelemetryToMicrosoft": false,
   "doNotPublishApps": false,
-
   "commitOptions": {
     "createPullRequest": true,
     "pullRequestAutoMerge": false,
@@ -64,7 +51,6 @@
     "pullRequestLabels": [],
     "messageSuffix": ""
   },
-
   "features": [],
   "customCodeCops": [],
   "preprocessorSymbols": [],
@@ -72,14 +58,12 @@
   "excludeEnvironments": [],
   "environments": [],
   "buildModes": [],
-
   "deliverToAppSource": {
     "mainAppFolder": "",
     "productId": "",
     "includeDependencies": [],
     "continuousDelivery": false
   },
-
   "alDoc": {
     "continuousDeployment": false,
     "deployToGitHubPages": true,
@@ -88,9 +72,8 @@
     "includeProjects": [],
     "excludeProjects": []
   },
-
   "memoryLimit": "",
-  "useGitSubmodules": false,
+  "useGitSubmodules": "N",
   "useProjectDependencies": false,
   "useCompilerFolder": false,
   "fullBuildPatterns": [],
@@ -98,7 +81,6 @@
   "alwaysBuildAllProjects": false,
   "skipUpgrade": false,
   "updateDependencies": false,
-
   "assignPremiumPlan": false,
   "enableTaskScheduler": false,
   "enableExternalRulesets": false,

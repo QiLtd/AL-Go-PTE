@@ -1,10 +1,17 @@
 {
-  "$schema": "https://raw.githubusercontent.com/microsoft/AL-Go-Actions/v9.2/.Modules/settings.schema.json",
-  "runsOn": ["self-hosted", "windows", "x64"],
-  "country": "gb","useGitSubmodules": "N",
-  "appFolders": ["."],
-  "testFolders": [],
   "bcptTestFolders": [],
-  "versioningStrategy": 3
+  "useGitSubmodules": "N",
+  "appFolders": [
+    ".",
+    "ProjName"
+  ],
+  "$schema": "https://raw.githubusercontent.com/microsoft/AL-Go-Actions/v9.2/.Modules/settings.schema.json",
+  "testFolders": [],
+  "versioningStrategy": 3,
+  "runsOn": [
+    "self-hosted",
+    "windows",
+    "x64"
+  ],
+  "country": "gb"
 }
-
