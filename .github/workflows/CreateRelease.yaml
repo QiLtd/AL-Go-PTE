@@ -32,9 +32,14 @@ on:
         type: string
         default: release/
       updateVersionNumber:
-        description: New Version Number in main branch. Use Major.Minor (optionally add .Build for versioningstrategy 3) for absolute change, or +1, +0.1 (or +0.0.1 for versioningstrategy 3) incremental change.
-        required: true
-        default: '+0.0.1'
+        description: Version bump (+Major.Minor.Patch)
+        required: false
+        type: choice
+        options:
+          - Patch
+          - Minor
+          - Major
+        default: Patch
       skipUpdatingDependencies:
         description: Skip updating dependency version numbers in all apps.
         type: boolean
@@ -42,7 +47,7 @@ on:
       directCommit:
         description: Direct Commit?
         type: boolean
-        default: false
+        default: true
       useGhTokenWorkflow:
         description: Use GhTokenWorkflow for PR/Commit?
         type: boolean
@@ -362,7 +367,7 @@ jobs:
         with:
           shell: powershell
           token: ${{ steps.ReadSecrets.outputs.TokenForPush }}
-          versionNumber: ${{ github.event.inputs.updateVersionNumber }}
+          versionNumber: ${{ github.event.inputs.updateVersionNumber == 'Patch' && '+0.0.1' || github.event.inputs.updateVersionNumber == 'Minor' && '+0.1.0' || '+1.0.0' }}
           skipUpdatingDependencies: ${{ github.event.inputs.skipUpdatingDependencies }}
           directCommit: ${{ github.event.inputs.directCommit }}
 
