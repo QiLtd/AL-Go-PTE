@@ -1,7 +1,12 @@
 {
     "folders": [
         {
-            "path": ".AL-Go"
+            "name": "Repository",
+            "path": "."
+        },
+        {
+            "name": "ProjName",
+            "path": "ProjName"
         }
     ],
     "settings": {}
