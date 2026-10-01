@@ -51,7 +51,7 @@ on:
       useGhTokenWorkflow:
         description: Use GhTokenWorkflow for PR/Commit?
         type: boolean
-        default: false
+        default: true
 
 permissions:
   actions: read
